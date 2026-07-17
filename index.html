@@ -242,14 +242,12 @@
    (Console Firebase > Paramètres du projet > Tes apps > SDK)
    ========================================================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyDgVfY_JDGOZ7_rShFhLHsK9Vl3cGa8ds0",
-  authDomain: "discovertheworld-f4e95.firebaseapp.com",
-  databaseURL: "https://discovertheworld-f4e95-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "discovertheworld-f4e95",
-  storageBucket: "discovertheworld-f4e95.firebasestorage.app",
-  messagingSenderId: "166227712020",
-  appId: "1:166227712020:web:e737990e0c977b0c036f01",
-  measurementId: "G-YQWHFJTTJJ"
+  apiKey: "REPLACE_ME",
+  authDomain: "REPLACE_ME.firebaseapp.com",
+  projectId: "REPLACE_ME",
+  storageBucket: "REPLACE_ME.appspot.com",
+  messagingSenderId: "REPLACE_ME",
+  appId: "REPLACE_ME"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -740,6 +738,7 @@ async function queryVisibleZones() {
 function renderZones(minLngIdx, maxLngIdx) {
   zoneLayerGroup.clearLayers();
   Object.entries(zoneCache).forEach(([zoneId, data]) => {
+    if (!data) return; // zone libre (pas de propriétaire) : rien à dessiner
     if (data.lngIdx < minLngIdx || data.lngIdx > maxLngIdx) return;
     const bounds = zoneBoundsFor(data.latIdx, data.lngIdx);
     L.rectangle([[bounds.south, bounds.west], [bounds.north, bounds.east]], {
@@ -761,7 +760,7 @@ async function updateCurrentZone(lat, lng) {
   if (unsubscribeCurrentZone) unsubscribeCurrentZone();
   unsubscribeCurrentZone = db.collection('zones').doc(zoneId).onSnapshot(doc => {
     const data = doc.exists ? doc.data() : null;
-    zoneCache[zoneId] = data;
+    if (data) zoneCache[zoneId] = data; else delete zoneCache[zoneId];
     document.getElementById('zoneBanner').classList.remove('hidden');
     const dot = document.getElementById('zoneDot');
     const label = document.getElementById('zoneLabel');
@@ -825,7 +824,7 @@ document.getElementById('captureBtn').addEventListener('click', async () => {
       capturedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     showToast('Zone capturée !');
-    zoneCache[currentZoneId] = null; // sera rafraîchi par le listener onSnapshot
+    delete zoneCache[currentZoneId]; // sera rafraîchi par le listener onSnapshot
     queryVisibleZones();
   } catch (e) {
     showToast('Capture impossible : ' + e.message);

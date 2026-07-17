@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>DTW · Discover The World</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --void:#05050a;
+    --void-2:#0b0c12;
+    --brass:#d4a054;
+    --brass-dim:#8a6b3a;
+    --teal:#2ec4b6;
+    --parchment:#e8dfc8;
+    --danger:#c85a4a;
+    --mono:'IBM Plex Mono', monospace;
+    --sans:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0; background:var(--void); color:var(--parchment); font-family:var(--sans); overflow:hidden;}
+
+  #map{position:absolute; inset:0; background:#000; z-index:1;}
+  #fogCanvas{position:absolute; inset:0; z-index:400; pointer-events:none;}
+
+  /* ---------- Auth screen ---------- */
+  #authScreen{
+    position:fixed; inset:0; z-index:2000; background:radial-gradient(ellipse at 50% 20%, #12131d 0%, var(--void) 70%);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .authCard{width:100%; max-width:380px;}
+  .brand{text-align:center; margin-bottom:32px;}
+  .brand .mark{font-family:var(--mono); font-size:13px; letter-spacing:0.35em; color:var(--brass-dim); text-transform:uppercase;}
+  .brand h1{font-family:var(--mono); font-size:34px; letter-spacing:0.06em; margin:6px 0 0; color:var(--parchment); font-weight:600;}
+  .brand h1 span{color:var(--brass);}
+  .authTabs{display:flex; gap:2px; margin-bottom:20px; background:var(--void-2); border-radius:8px; padding:3px;}
+  .authTab{flex:1; text-align:center; padding:10px; border-radius:6px; font-size:13px; letter-spacing:0.04em; cursor:pointer; color:#7d7d8c; transition:all .2s;}
+  .authTab.active{background:var(--brass); color:#1a1200; font-weight:600;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#7d7d8c; margin-bottom:6px;}
+  .field input{width:100%; padding:12px 14px; border-radius:8px; border:1px solid #23242f; background:var(--void-2); color:var(--parchment); font-size:15px; font-family:var(--sans); outline:none;}
+  .field input:focus{border-color:var(--brass-dim);}
+  .authBtn{width:100%; padding:13px; border:none; border-radius:8px; background:var(--brass); color:#1a1200; font-weight:700; font-size:14px; letter-spacing:0.03em; cursor:pointer; margin-top:6px;}
+  .authBtn:disabled{opacity:0.5;}
+  .authError{color:var(--danger); font-size:13px; margin-top:12px; text-align:center; min-height:16px;}
+  .authFoot{text-align:center; margin-top:18px; font-size:12px; color:#54545f;}
+  .authFoot a{color:#7d7d8c; text-decoration:underline;}
+  .consentField{margin-bottom:14px; background:var(--void-2); border:1px solid #23242f; border-radius:8px; padding:12px 14px;}
+  .consentLabel{display:flex; align-items:flex-start; gap:10px; font-size:12px; color:#a8a8b3; line-height:1.5; cursor:pointer;}
+  .consentLabel input{margin-top:3px; flex-shrink:0; accent-color:var(--brass);}
+  .consentLabel a{color:var(--brass);}
+
+  /* ---------- HUD ---------- */
+  #hud{position:fixed; inset:0; z-index:1000; pointer-events:none;}
+  #topBar{position:absolute; top:0; left:0; right:0; padding:14px 16px; display:flex; justify-content:space-between; align-items:flex-start;
+    background:linear-gradient(180deg, rgba(5,5,10,0.85) 0%, rgba(5,5,10,0) 100%); pointer-events:auto;}
+  #topBar .mark{font-family:var(--mono); font-size:16px; letter-spacing:0.04em;}
+  #topBar .mark b{color:var(--brass);}
+  #userChip{display:flex; align-items:center; gap:8px; background:rgba(11,12,18,0.7); border:1px solid #23242f; padding:6px 10px; border-radius:20px; font-size:12px; cursor:pointer;}
+  #userChip .dot{width:7px; height:7px; border-radius:50%; background:var(--teal); box-shadow:0 0 6px var(--teal);}
+
+  #statPanel{position:absolute; bottom:18px; left:16px; right:16px; display:flex; justify-content:space-between; align-items:flex-end; pointer-events:none;}
+  .logbook{pointer-events:auto; background:rgba(11,12,18,0.88); border:1px solid #23242f; border-radius:12px; backdrop-filter:blur(6px); max-width:230px; overflow:hidden;}
+  .logbook .lbl{font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:#7d7d8c; margin-bottom:2px;}
+  .logbook .val{font-family:var(--mono); font-size:20px; color:var(--brass); line-height:1.1;}
+  .logbook .val small{font-size:11px; color:#7d7d8c; margin-left:3px;}
+  .logbookRow.main{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 16px; cursor:pointer;}
+  .logbookRow.main .chev{width:16px; height:16px; stroke:#54545f; transition:transform .25s; flex-shrink:0;}
+  .logbookRow.main.open .chev{transform:rotate(180deg);}
+  .logbookExtra{border-top:1px solid #23242f; padding:4px 16px 10px;}
+  .statRow{display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px dashed #1c1d27;}
+  .statRow:last-child{border-bottom:none;}
+  .statRow .lbl{margin-bottom:0; font-size:10.5px;}
+  .statRow .val.small{font-size:14px; color:var(--parchment);}
+  .statRow .val.small.accent{color:var(--teal);}
+  .percentNote{font-size:10px; color:#54545f; padding:2px 0 0; line-height:1.4;}
+
+  #locateBtn{pointer-events:auto; width:52px; height:52px; border-radius:50%; background:var(--brass); border:none; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,0.5); cursor:pointer;}
+  #locateBtn.tracking{background:var(--teal);}
+  #locateBtn svg{width:24px; height:24px;}
+
+  #settingsBtn{position:absolute; bottom:18px; right:16px; z-index:1001; pointer-events:auto; width:40px; height:40px; border-radius:50%; background:rgba(11,12,18,0.88); border:1px solid #23242f; display:flex; align-items:center; justify-content:center; cursor:pointer; margin-bottom:66px;}
+  #settingsBtn svg{width:18px; height:18px;}
+
+  #radiusPanel{position:absolute; bottom:70px; right:16px; z-index:1001; pointer-events:auto; width:230px; background:rgba(11,12,18,0.92); border:1px solid #23242f; border-radius:12px; padding:14px 16px; backdrop-filter:blur(6px);}
+  .radiusHead{display:flex; justify-content:space-between; align-items:center; font-size:12px; letter-spacing:0.03em; margin-bottom:8px;}
+  .radiusHead .accentVal{font-family:var(--mono); color:var(--brass); font-size:14px;}
+  #radiusSlider{width:100%; accent-color:var(--brass); margin:4px 0;}
+  .radiusHint{font-size:10.5px; color:#7d7d8c; line-height:1.4; margin-top:6px;}
+  .radiusHint span{color:var(--teal);}
+
+  #toast{position:fixed; top:70px; left:50%; transform:translateX(-50%); background:rgba(11,12,18,0.95); border:1px solid var(--brass-dim); color:var(--parchment); padding:9px 16px; border-radius:8px; font-size:13px; z-index:3000; opacity:0; transition:opacity .3s; pointer-events:none; max-width:80vw; text-align:center;}
+  #toast.show{opacity:1;}
+
+  .hidden{display:none !important;}
+
+  .leaflet-control-attribution{background:rgba(5,5,10,0.6) !important; color:#54545f !important; font-size:9px !important;}
+  .leaflet-control-attribution a{color:#7d7d8c !important;}
+  .leaflet-control-zoom{display:none;}
+
+  /* ---------- Zone banner ---------- */
+  #zoneBanner{position:absolute; top:66px; left:50%; transform:translateX(-50%); z-index:1001; pointer-events:auto;
+    display:flex; align-items:center; gap:10px; background:rgba(11,12,18,0.9); border:1px solid #23242f; border-radius:24px;
+    padding:8px 10px 8px 16px; backdrop-filter:blur(6px); max-width:90vw;}
+  #zoneBanner .zoneDot{width:9px; height:9px; border-radius:50%; background:#54545f; flex-shrink:0;}
+  #zoneBanner #zoneLabel{font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  #captureBtn{background:var(--brass); color:#1a1200; border:none; border-radius:18px; padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap;}
+  #captureBtn.steal{background:var(--danger); color:#fff;}
+
+  /* ---------- Profile panel ---------- */
+  #profilePanel{position:absolute; top:60px; right:16px; z-index:1001; pointer-events:auto; width:220px;
+    background:rgba(11,12,18,0.94); border:1px solid #23242f; border-radius:12px; padding:16px; backdrop-filter:blur(6px);}
+  .profileName{font-family:var(--mono); font-size:16px; color:var(--brass);}
+  .profileSub{font-size:10.5px; color:#7d7d8c; text-transform:uppercase; letter-spacing:0.08em; margin:14px 0 8px;}
+  .colorGrid{display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:16px;}
+  .colorSwatch{width:100%; aspect-ratio:1; border-radius:8px; cursor:pointer; border:2px solid transparent; transition:transform .15s;}
+  .colorSwatch.selected{border-color:#fff; transform:scale(0.9);}
+  .logoutBtn{width:100%; padding:11px; border:none; border-radius:8px; background:transparent; border:1px solid var(--danger); color:var(--danger); font-weight:600; font-size:13px; cursor:pointer;}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="authScreen">
+  <div class="authCard">
+    <div class="brand">
+      <div class="mark">Discover The World</div>
+      <h1>D<span>T</span>W</h1>
+    </div>
+    <div class="authTabs">
+      <div class="authTab active" data-mode="login">Connexion</div>
+      <div class="authTab" data-mode="signup">Créer un profil</div>
+    </div>
+    <div id="signupNameField" class="field hidden">
+      <label>Nom d'explorateur</label>
+      <input type="text" id="displayNameInput" placeholder="Yoan" autocomplete="name">
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="emailInput" placeholder="toi@exemple.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Mot de passe</label>
+      <input type="password" id="passwordInput" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <div id="forgotPasswordRow" style="text-align:right; margin:-8px 0 14px;">
+      <a href="#" id="forgotPasswordLink" style="font-size:12px; color:#7d7d8c; text-decoration:underline;">Mot de passe oublié ?</a>
+    </div>
+    <div class="consentField hidden" id="consentField">
+      <label class="consentLabel">
+        <input type="checkbox" id="consentCheckbox">
+        <span>J'ai lu la <a href="confidentialite.html" target="_blank">politique de confidentialité</a> et j'accepte que ma position soit traitée pour révéler ma carte et, si je capture des zones, que mon nom et leur emplacement soient visibles des autres joueurs.</span>
+      </label>
+    </div>
+    <button class="authBtn" id="authSubmitBtn">Se connecter</button>
+    <div class="authError" id="authError"></div>
+    <div class="authFoot">Ta trace GPS continue n'est jamais stockée — seulement des zones ponctuelles, privées sauf celles que tu captures volontairement.<br>
+      <a href="confidentialite.html" target="_blank">Confidentialité</a> · <a href="mentions-legales.html" target="_blank">Mentions légales</a>
+    </div>
+  </div>
+</div>
+
+<!-- MAP -->
+<div id="map"></div>
+<canvas id="fogCanvas"></canvas>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="topBar">
+    <div class="mark">D<b>T</b>W</div>
+    <div id="userChip"><span class="dot"></span><span id="userChipName">—</span></div>
+  </div>
+
+  <div id="zoneBanner" class="hidden">
+    <span class="zoneDot" id="zoneDot"></span>
+    <span id="zoneLabel">Zone libre</span>
+    <button id="captureBtn" class="hidden">Capturer</button>
+  </div>
+
+  <div id="profilePanel" class="hidden">
+    <div class="profileName" id="profileNameDisplay">—</div>
+    <div class="profileSub">Couleur de territoire</div>
+    <div class="colorGrid" id="colorGrid"></div>
+    <button class="logoutBtn" id="exportDataBtn" style="margin-bottom:8px; border-color:#23242f; color:#a8a8b3;">Exporter mes données</button>
+    <button class="logoutBtn" id="logoutBtn">Se déconnecter</button>
+    <button class="logoutBtn" id="deleteAccountBtn" style="margin-top:8px;">Supprimer mon compte</button>
+    <div class="profileSub" style="text-align:center; margin-top:14px;">
+      <a href="confidentialite.html" target="_blank" style="color:#54545f;">Confidentialité</a> ·
+      <a href="mentions-legales.html" target="_blank" style="color:#54545f;">Mentions légales</a>
+    </div>
+  </div>
+
+  <div id="statPanel">
+    <div class="logbook" id="logbookPanel">
+      <div class="logbookRow main" id="logbookToggle">
+        <div>
+          <div class="lbl">Zone explorée</div>
+          <div class="val" id="statArea">0 <small>m²</small></div>
+        </div>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="logbookExtra hidden" id="logbookExtra">
+        <div class="statRow"><span class="lbl">% de la planète</span><span class="val small" id="statPercent">0 %</span></div>
+        <div class="statRow"><span class="lbl">Distance parcourue</span><span class="val small accent" id="statDistance">0 km</span></div>
+        <div class="statRow"><span class="lbl">Pas estimés</span><span class="val small" id="statSteps">0</span></div>
+        <div class="statRow"><span class="lbl">Record d'une sortie</span><span class="val small" id="statRecord">0 km</span></div>
+        <div class="percentNote">Terre ≈ 510,1 M km² (océans inclus)</div>
+      </div>
+    </div>
+    <button id="locateBtn" title="Suivre ma position">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#1a1200" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+    </button>
+  </div>
+  <div id="radiusPanel" class="hidden">
+    <div class="radiusHead">
+      <span>Champ de vision</span>
+      <span id="radiusValue" class="accentVal">80 m</span>
+    </div>
+    <input type="range" id="radiusSlider" min="30" max="300" step="10" value="80">
+    <div class="radiusHint">Rayon révélé autour de toi à chaque nouveau point. Un point s'enregistre tous les <span id="radiusJumpHint">48 m</span> environ.</div>
+  </div>
+  <button id="settingsBtn" title="Réglages">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#e8dfc8" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+  </button>
+</div>
+
+<div id="toast"></div>
+
+<!-- Firebase (compat SDKs, no build step) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+/* =========================================================
+   1. FIREBASE CONFIG — remplace par la config de TON projet
+   (Console Firebase > Paramètres du projet > Tes apps > SDK)
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "REPLACE_ME",
+  authDomain: "REPLACE_ME.firebaseapp.com",
+  projectId: "REPLACE_ME",
+  storageBucket: "REPLACE_ME.appspot.com",
+  messagingSenderId: "REPLACE_ME",
+  appId: "REPLACE_ME"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+auth.languageCode = 'fr'; // emails Firebase (vérification, reset mdp...) envoyés en français
+const db = firebase.firestore();
+
+/* =========================================================
+   2. PARAMÈTRES D'EXPLORATION
+   ========================================================= */
+const DEFAULT_VISION_RADIUS_M = 80;  // rayon "champ de vision" par défaut, en mètres
+const RADIUS_MIN_M      = 30;
+const RADIUS_MAX_M      = 300;
+const JUMP_RATIO         = 0.6;  // distance mini entre 2 points enregistrés = radius * ce ratio (évite trous ET surcouverture)
+const MAX_ACCURACY_M    = 60;    // on ignore les positions GPS trop imprécises
+const WORLD_START       = [20, 10];
+const WORLD_START_ZOOM  = 3;
+
+const STRIDE_M          = 0.75;  // longueur de pas moyenne, pour l'estimation du nombre de pas
+const MIN_MOVE_M        = 3;     // en dessous, on considère que c'est du bruit GPS (pas de la marche)
+const MAX_PLAUSIBLE_MS  = 12;    // vitesse plausible max (m/s, ~43km/h) pour filtrer les sauts GPS
+const PLANET_AREA_KM2   = 510100000; // surface totale de la Terre, océans inclus
+
+/* ---- Boucles fermées : marche autour d'une zone -> tout l'intérieur se révèle ---- */
+const LOOP_CLOSE_THRESHOLD_M = 20;      // distance mini pour considérer une boucle "refermée"
+const LOOP_MIN_PATH_M        = 60;      // longueur mini parcourue avant de chercher une fermeture
+const LOOP_MIN_POINTS        = 6;       // nombre mini de points GPS avant de chercher une fermeture
+const MAX_LOOP_AREA_M2       = 2000000; // 2 km² : plafond anti-abus (une boucle immense ne compte pas)
+
+/* ---- Zones (territoire façon Nation Glory) ----
+   Grille en degrés fixes (PAS de trigonométrie ici) pour que les Firestore
+   Rules puissent revalider exactement le même calcul côté serveur.
+   Calibrée pour ~45°N (France) : les cellules restent ~carrées en Europe,
+   elles se déforment en s'éloignant de cette latitude (acceptable pour un usage local). */
+const ZONE_SIZE_M        = 300;
+const LAT_STEP_DEG       = 0.0026946;  // 300m / 111320
+const LNG_STEP_DEG       = 0.0038112;  // 300m / (111320 * cos(45°))
+const EMPTY_ZONE_COST_M  = 300;   // distance totale mini pour capturer une zone libre
+const ZONE_COLORS = ['#d4a054', '#2ec4b6', '#c85a4a', '#6a8fd8', '#9b5de5', '#f4a300', '#43aa8b', '#e63946'];
+
+/* =========================================================
+   3. ETAT
+   ========================================================= */
+let map, fogCtx, fogCanvas;
+let revealed = [];       // {lat, lng, r} points déjà révélés (cache mémoire, vient de Firestore)
+let currentUser = null;
+let unsubscribeCells = null;
+let watchId = null;
+let userMarker = null, accuracyCircle = null;
+let tracking = false;
+
+let totalDistanceM = 0;    // cumulé, chargé depuis Firestore
+let longestSessionM = 0;   // record d'une sortie, chargé depuis Firestore
+let sessionDistanceM = 0;  // distance de la session de tracking en cours
+let lastTrackedPos = null; // {lat, lng, ts} dernier point utilisé pour le calcul de distance
+let revealedLoops = [];    // boucles fermées révélées, chargées depuis Firestore
+let sessionPath = [];      // trajet GPS de la session de tracking en cours (mémoire uniquement)
+let unsubscribeLoops = null;
+let visionRadiusM = DEFAULT_VISION_RADIUS_M; // ajustable via le slider, persisté par profil
+
+let zoneColor = ZONE_COLORS[0];
+let zoneLayerGroup = null;         // rectangles des zones affichées sur la carte
+let zoneCache = {};                // zoneId -> data, cache local pour éviter des lectures répétées
+let currentZoneId = null;          // zone dans laquelle le joueur se trouve actuellement
+let unsubscribeCurrentZone = null;
+let lastZoneQueryKey = null;
+
+/* =========================================================
+   4. AUTH UI
+   ========================================================= */
+const authScreen = document.getElementById('authScreen');
+const authTabs = document.querySelectorAll('.authTab');
+const signupNameField = document.getElementById('signupNameField');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+const authError = document.getElementById('authError');
+let authMode = 'login';
+
+authTabs.forEach(tab => tab.addEventListener('click', () => {
+  authTabs.forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  authMode = tab.dataset.mode;
+  signupNameField.classList.toggle('hidden', authMode !== 'signup');
+  document.getElementById('consentField').classList.toggle('hidden', authMode !== 'signup');
+  document.getElementById('forgotPasswordRow').classList.toggle('hidden', authMode !== 'login');
+  authSubmitBtn.textContent = authMode === 'signup' ? 'Créer mon profil' : 'Se connecter';
+  authError.style.color = '';
+  authError.textContent = '';
+}));
+
+authSubmitBtn.addEventListener('click', async () => {
+  const email = document.getElementById('emailInput').value.trim();
+  const password = document.getElementById('passwordInput').value;
+  const name = document.getElementById('displayNameInput').value.trim();
+  authError.textContent = '';
+  if (!email || !password) { authError.textContent = 'Email et mot de passe requis.'; return; }
+  if (authMode === 'signup' && !document.getElementById('consentCheckbox').checked) {
+    authError.textContent = 'Il faut accepter la politique de confidentialité pour créer un profil.';
+    return;
+  }
+
+  authSubmitBtn.disabled = true;
+  try {
+    if (authMode === 'signup') {
+      if (password.length < 6) throw new Error('Mot de passe : 6 caractères minimum.');
+      const cred = await auth.createUserWithEmailAndPassword(email, password);
+      if (name) await cred.user.updateProfile({ displayName: name });
+      await db.collection('users').doc(cred.user.uid).set({
+        displayName: name || email.split('@')[0],
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        consentAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      cred.user.sendEmailVerification().catch(() => {}); // best-effort, ne bloque pas l'inscription
+      showToast('Profil créé — un email de vérification vient de t\'être envoyé.');
+    } else {
+      await auth.signInWithEmailAndPassword(email, password);
+    }
+  } catch (e) {
+    authError.textContent = translateAuthError(e);
+  } finally {
+    authSubmitBtn.disabled = false;
+  }
+});
+
+function translateAuthError(e) {
+  const map = {
+    'auth/email-already-in-use': 'Cet email est déjà utilisé.',
+    'auth/invalid-email': 'Email invalide.',
+    'auth/weak-password': 'Mot de passe trop faible (6 caractères min).',
+    'auth/user-not-found': 'Aucun profil avec cet email.',
+    'auth/wrong-password': 'Mot de passe incorrect.',
+    'auth/invalid-credential': 'Email ou mot de passe incorrect.',
+    'auth/too-many-requests': 'Trop de tentatives, réessaie plus tard.'
+  };
+  return map[e.code] || e.message;
+}
+
+document.getElementById('forgotPasswordLink').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('emailInput').value.trim();
+  authError.textContent = '';
+  if (!email) { authError.textContent = 'Renseigne ton email ci-dessus, puis clique à nouveau sur ce lien.'; return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    authError.style.color = 'var(--teal)';
+    authError.textContent = 'Email de réinitialisation envoyé (pense à vérifier tes spams).';
+  } catch (e2) {
+    authError.style.color = '';
+    authError.textContent = translateAuthError(e2);
+  }
+});
+
+document.getElementById('userChip').addEventListener('click', () => {
+  document.getElementById('profilePanel').classList.toggle('hidden');
+});
+
+const colorGrid = document.getElementById('colorGrid');
+ZONE_COLORS.forEach(hex => {
+  const sw = document.createElement('div');
+  sw.className = 'colorSwatch';
+  sw.style.background = hex;
+  sw.dataset.color = hex;
+  sw.addEventListener('click', async () => {
+    zoneColor = hex;
+    [...colorGrid.children].forEach(c => c.classList.toggle('selected', c.dataset.color === hex));
+    if (currentUser) {
+      try {
+        await db.collection('users').doc(currentUser.uid).set({ zoneColor: hex }, { merge: true });
+        showToast('Couleur de territoire mise à jour');
+      } catch (e) {
+        showToast('Couleur non sauvegardée : ' + e.message);
+      }
+    }
+  });
+  colorGrid.appendChild(sw);
+});
+
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  if (confirm('Se déconnecter de DTW ?')) auth.signOut();
+  document.getElementById('profilePanel').classList.add('hidden');
+});
+
+document.getElementById('exportDataBtn').addEventListener('click', async () => {
+  if (!currentUser) return;
+  showToast('Préparation de ton export...');
+  try {
+    const profileDoc = await db.collection('users').doc(currentUser.uid).get();
+    const cellsSnap = await db.collection('users').doc(currentUser.uid).collection('cells').get();
+    const loopsSnap = await db.collection('users').doc(currentUser.uid).collection('loops').get();
+    const zonesSnap = await db.collection('zones').where('ownerId', '==', currentUser.uid).get();
+
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      profile: { email: currentUser.email, ...profileDoc.data() },
+      revealedCells: cellsSnap.docs.map(d => d.data()),
+      closedLoops: loopsSnap.docs.map(d => d.data()),
+      capturedZones: zonesSnap.docs.map(d => ({ zoneId: d.id, ...d.data() }))
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'dtw-mes-donnees-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Export téléchargé.');
+  } catch (e) {
+    showToast('Export impossible : ' + e.message);
+  }
+});
+
+document.getElementById('deleteAccountBtn').addEventListener('click', async () => {
+  if (!currentUser) return;
+  const sure = confirm(
+    'Supprimer définitivement ton compte DTW ?\n\n' +
+    'Cela efface ta carte explorée, tes statistiques, et libère les zones que tu possèdes. ' +
+    'Cette action est IRRÉVERSIBLE.'
+  );
+  if (!sure) return;
+
+  const uid = currentUser.uid;
+  document.getElementById('deleteAccountBtn').disabled = true;
+  try {
+    // 1. Supprime les zones que tu possèdes (elles redeviennent libres)
+    const zonesSnap = await db.collection('zones').where('ownerId', '==', uid).get();
+    let batch = db.batch();
+    let opCount = 0;
+    for (const doc of zonesSnap.docs) {
+      batch.delete(doc.ref);
+      if (++opCount >= 450) { await batch.commit(); batch = db.batch(); opCount = 0; }
+    }
+
+    // 2. Supprime toutes tes zones révélées (fog of war)
+    const cellsSnap = await db.collection('users').doc(uid).collection('cells').get();
+    for (const doc of cellsSnap.docs) {
+      batch.delete(doc.ref);
+      if (++opCount >= 450) { await batch.commit(); batch = db.batch(); opCount = 0; }
+    }
+
+    // 2b. Supprime toutes tes boucles fermées
+    const loopsSnap = await db.collection('users').doc(uid).collection('loops').get();
+    for (const doc of loopsSnap.docs) {
+      batch.delete(doc.ref);
+      if (++opCount >= 450) { await batch.commit(); batch = db.batch(); opCount = 0; }
+    }
+    if (opCount > 0) await batch.commit();
+
+    // 3. Supprime ton profil
+    await db.collection('users').doc(uid).delete();
+
+    // 4. Supprime le compte d'authentification
+    await currentUser.delete();
+
+    showToast('Compte supprimé.');
+  } catch (e) {
+    if (e.code === 'auth/requires-recent-login') {
+      showToast('Reconnecte-toi puis réessaie (Firebase exige une session récente pour supprimer un compte).');
+    } else {
+      showToast('Suppression incomplète : ' + e.message);
+    }
+  } finally {
+    document.getElementById('deleteAccountBtn').disabled = false;
+  }
+});
+
+/* =========================================================
+   5. AUTH STATE -> BOOT / TEARDOWN
+   ========================================================= */
+auth.onAuthStateChanged(async (user) => {
+  currentUser = user;
+  if (user) {
+    authScreen.classList.add('hidden');
+    const name = user.displayName || user.email.split('@')[0];
+    document.getElementById('userChipName').textContent = name;
+    document.getElementById('profileNameDisplay').textContent = name;
+    if (!map) initMap();
+    loadUserCells(user.uid);
+    loadUserLoops(user.uid);
+    loadUserStats(user.uid);
+  } else {
+    authScreen.classList.remove('hidden');
+    document.getElementById('profilePanel').classList.add('hidden');
+    stopTracking();
+    if (unsubscribeCells) unsubscribeCells();
+    if (unsubscribeLoops) unsubscribeLoops();
+    if (unsubscribeCurrentZone) unsubscribeCurrentZone();
+    revealed = [];
+    revealedLoops = [];
+    sessionPath = [];
+    totalDistanceM = 0; longestSessionM = 0; sessionDistanceM = 0; lastTrackedPos = null;
+    currentZoneId = null;
+    document.getElementById('zoneBanner').classList.add('hidden');
+    if (zoneLayerGroup) zoneLayerGroup.clearLayers();
+    if (fogCtx) drawFog();
+  }
+});
+
+/* =========================================================
+   6. MAP + FOG OF WAR
+   ========================================================= */
+function initMap() {
+  map = L.map('map', { zoomControl: true, attributionControl: true, minZoom: 3, maxZoom: 19 })
+        .setView(WORLD_START, WORLD_START_ZOOM);
+
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Esri World Imagery',
+    maxZoom: 19
+  }).addTo(map);
+
+  fogCanvas = document.getElementById('fogCanvas');
+  fogCtx = fogCanvas.getContext('2d');
+  resizeFog();
+
+  zoneLayerGroup = L.layerGroup().addTo(map);
+  map.on('moveend', queryVisibleZones);
+  queryVisibleZones();
+
+  map.on('move zoom resize', drawFog);
+  window.addEventListener('resize', () => { resizeFog(); drawFog(); });
+
+  drawFog();
+}
+
+function resizeFog() {
+  const dpr = window.devicePixelRatio || 1;
+  fogCanvas.width = window.innerWidth * dpr;
+  fogCanvas.height = window.innerHeight * dpr;
+  fogCanvas.style.width = window.innerWidth + 'px';
+  fogCanvas.style.height = window.innerHeight + 'px';
+  fogCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function metersPerPixel(lat, zoom) {
+  return 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+}
+
+function drawFog() {
+  if (!map) return;
+  const w = window.innerWidth, h = window.innerHeight;
+  fogCtx.clearRect(0, 0, w, h);
+  fogCtx.fillStyle = '#05050a';
+  fogCtx.fillRect(0, 0, w, h);
+
+  const bounds = map.getBounds().pad(0.3);
+  const zoom = map.getZoom();
+
+  fogCtx.globalCompositeOperation = 'destination-out';
+  for (const p of revealed) {
+    if (!bounds.contains([p.lat, p.lng])) continue;
+    const pt = map.latLngToContainerPoint([p.lat, p.lng]);
+    const mpp = metersPerPixel(p.lat, zoom);
+    const rPx = Math.max((p.r || visionRadiusM) / mpp, 4);
+    const grad = fogCtx.createRadialGradient(pt.x, pt.y, rPx * 0.55, pt.x, pt.y, rPx);
+    grad.addColorStop(0, 'rgba(0,0,0,1)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    fogCtx.fillStyle = grad;
+    fogCtx.beginPath();
+    fogCtx.arc(pt.x, pt.y, rPx, 0, Math.PI * 2);
+    fogCtx.fill();
+  }
+
+  // Boucles fermées : tout l'intérieur du polygone tracé à pied est révélé d'un coup
+  fogCtx.fillStyle = 'rgba(0,0,0,1)';
+  for (const loop of revealedLoops) {
+    if (!loop.points.some(p => bounds.contains([p.lat, p.lng]))) continue;
+    fogCtx.beginPath();
+    loop.points.forEach((p, i) => {
+      const pt = map.latLngToContainerPoint([p.lat, p.lng]);
+      if (i === 0) fogCtx.moveTo(pt.x, pt.y); else fogCtx.lineTo(pt.x, pt.y);
+    });
+    fogCtx.closePath();
+    fogCtx.fill();
+  }
+
+  fogCtx.globalCompositeOperation = 'source-over';
+  updateStats();
+}
+
+function updateStats() {
+  // Zone explorée + % de la planète
+  // Somme par point (et pas count * rayon fixe) car le rayon peut changer au fil du temps
+  const circlesAreaM2 = revealed.reduce((sum, p) => sum + Math.PI * (p.r || visionRadiusM) ** 2, 0);
+  const loopsAreaM2 = revealedLoops.reduce((sum, l) => sum + l.areaM2, 0);
+  const areaM2 = circlesAreaM2 + loopsAreaM2;
+  const areaEl = document.getElementById('statArea');
+  if (areaM2 > 1e6) {
+    areaEl.innerHTML = (areaM2 / 1e6).toFixed(2) + ' <small>km²</small>';
+  } else {
+    areaEl.innerHTML = Math.round(areaM2).toLocaleString('fr-FR') + ' <small>m²</small>';
+  }
+  const percent = (areaM2 / 1e6) / PLANET_AREA_KM2 * 100;
+  document.getElementById('statPercent').textContent =
+    percent === 0 ? '0 %' : (percent < 0.0001 ? percent.toExponential(2) + ' %' : percent.toFixed(6) + ' %');
+
+  // Distance parcourue (cumul + session en cours si tracking actif)
+  const liveTotalM = totalDistanceM + sessionDistanceM;
+  document.getElementById('statDistance').textContent = formatKm(liveTotalM);
+
+  // Pas estimés
+  const steps = Math.round(liveTotalM / STRIDE_M);
+  document.getElementById('statSteps').textContent = steps.toLocaleString('fr-FR');
+
+  // Record d'une sortie
+  const recordM = Math.max(longestSessionM, sessionDistanceM);
+  document.getElementById('statRecord').textContent = formatKm(recordM);
+}
+
+function formatKm(meters) {
+  if (meters >= 1000) return (meters / 1000).toFixed(2) + ' km';
+  return Math.round(meters) + ' m';
+}
+
+function formatArea(m2) {
+  if (m2 >= 1e6) return (m2 / 1e6).toFixed(2) + ' km²';
+  return Math.round(m2).toLocaleString('fr-FR') + ' m²';
+}
+
+document.getElementById('logbookToggle').addEventListener('click', () => {
+  document.getElementById('logbookToggle').classList.toggle('open');
+  document.getElementById('logbookExtra').classList.toggle('hidden');
+});
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('radiusPanel').classList.toggle('hidden');
+});
+
+const radiusSlider = document.getElementById('radiusSlider');
+const radiusValueEl = document.getElementById('radiusValue');
+const radiusJumpHintEl = document.getElementById('radiusJumpHint');
+
+radiusSlider.addEventListener('input', () => {
+  visionRadiusM = parseInt(radiusSlider.value, 10);
+  radiusValueEl.textContent = visionRadiusM + ' m';
+  radiusJumpHintEl.textContent = Math.round(visionRadiusM * JUMP_RATIO) + ' m';
+});
+
+radiusSlider.addEventListener('change', async () => {
+  if (!currentUser) return;
+  try {
+    await db.collection('users').doc(currentUser.uid).set({ visionRadiusM }, { merge: true });
+    showToast('Champ de vision réglé sur ' + visionRadiusM + ' m');
+  } catch (e) {
+    showToast('Réglage non sauvegardé : ' + e.message);
+  }
+});
+
+/* =========================================================
+   6b. ZONES — territoire façon Nation Glory
+   ========================================================= */
+function latIndexOf(lat) { return Math.floor(lat / LAT_STEP_DEG); }
+function lngIndexOf(lng) { return Math.floor(lng / LNG_STEP_DEG); }
+function zoneIdFor(lat, lng) { return latIndexOf(lat) + '_' + lngIndexOf(lng); }
+function zoneBoundsFor(latIdx, lngIdx) {
+  return {
+    south: latIdx * LAT_STEP_DEG, north: (latIdx + 1) * LAT_STEP_DEG,
+    west: lngIdx * LNG_STEP_DEG, east: (lngIdx + 1) * LNG_STEP_DEG
+  };
+}
+
+// Requête les zones visibles à l'écran (une seule contrainte d'inégalité sur latIdx,
+// pour éviter d'avoir besoin d'un index composite Firestore) puis filtre lngIdx en local.
+async function queryVisibleZones() {
+  if (!map) return;
+  const b = map.getBounds();
+  const minLatIdx = latIndexOf(b.getSouth()) - 1;
+  const maxLatIdx = latIndexOf(b.getNorth()) + 1;
+  const minLngIdx = lngIndexOf(b.getWest()) - 1;
+  const maxLngIdx = lngIndexOf(b.getEast()) + 1;
+  const key = [minLatIdx, maxLatIdx, minLngIdx, maxLngIdx].join(',');
+  if (key === lastZoneQueryKey) return;
+  lastZoneQueryKey = key;
+
+  if ((maxLatIdx - minLatIdx) > 120) return; // trop dézoomé (vue monde) : pas la peine de charger des zones de 300m
+
+  try {
+    const snap = await db.collection('zones')
+      .where('latIdx', '>=', minLatIdx)
+      .where('latIdx', '<=', maxLatIdx)
+      .limit(400)
+      .get();
+    snap.forEach(doc => { zoneCache[doc.id] = doc.data(); });
+    renderZones(minLngIdx, maxLngIdx);
+  } catch (e) {
+    showToast('Erreur chargement zones : ' + e.message);
+  }
+}
+
+function renderZones(minLngIdx, maxLngIdx) {
+  zoneLayerGroup.clearLayers();
+  Object.entries(zoneCache).forEach(([zoneId, data]) => {
+    if (data.lngIdx < minLngIdx || data.lngIdx > maxLngIdx) return;
+    const bounds = zoneBoundsFor(data.latIdx, data.lngIdx);
+    L.rectangle([[bounds.south, bounds.west], [bounds.north, bounds.east]], {
+      color: data.color || '#54545f',
+      weight: 1,
+      fillColor: data.color || '#54545f',
+      fillOpacity: 0.18,
+      interactive: false
+    }).addTo(zoneLayerGroup);
+  });
+}
+
+// Appelé à chaque position GPS : détecte un changement de zone, notifie, met à jour le bouton capture.
+async function updateCurrentZone(lat, lng) {
+  const zoneId = zoneIdFor(lat, lng);
+  if (zoneId === currentZoneId) { refreshCaptureButton(zoneCache[zoneId]); return; }
+  currentZoneId = zoneId;
+
+  if (unsubscribeCurrentZone) unsubscribeCurrentZone();
+  unsubscribeCurrentZone = db.collection('zones').doc(zoneId).onSnapshot(doc => {
+    const data = doc.exists ? doc.data() : null;
+    zoneCache[zoneId] = data;
+    document.getElementById('zoneBanner').classList.remove('hidden');
+    const dot = document.getElementById('zoneDot');
+    const label = document.getElementById('zoneLabel');
+    if (data) {
+      dot.style.background = data.color;
+      dot.style.boxShadow = '0 0 6px ' + data.color;
+      const mine = currentUser && data.ownerId === currentUser.uid;
+      label.textContent = mine ? 'Ta zone' : 'Zone de ' + data.ownerName;
+    } else {
+      dot.style.background = '#54545f';
+      dot.style.boxShadow = 'none';
+      label.textContent = 'Zone libre';
+    }
+    refreshCaptureButton(data);
+  });
+}
+
+function refreshCaptureButton(zoneData) {
+  const btn = document.getElementById('captureBtn');
+  if (!currentUser || !tracking) { btn.classList.add('hidden'); return; }
+  if (zoneData && zoneData.ownerId === currentUser.uid) { btn.classList.add('hidden'); return; }
+
+  if (!zoneData) {
+    // Zone libre
+    if (totalDistanceM >= EMPTY_ZONE_COST_M) {
+      btn.textContent = 'Capturer (' + EMPTY_ZONE_COST_M + 'm requis)';
+      btn.classList.remove('hidden', 'steal');
+    } else {
+      btn.classList.add('hidden');
+    }
+    return;
+  }
+  // Zone occupée : il faut avoir parcouru plus au total que le propriétaire actuel
+  if (totalDistanceM > zoneData.ownerDistanceM) {
+    btn.textContent = 'Prendre à ' + zoneData.ownerName;
+    btn.classList.remove('hidden');
+    btn.classList.add('steal');
+  } else {
+    btn.classList.add('hidden');
+  }
+}
+
+document.getElementById('captureBtn').addEventListener('click', async () => {
+  if (!currentUser || !currentZoneId || !lastTrackedPos) {
+    showToast('Il faut être en tracking GPS pour capturer une zone.');
+    return;
+  }
+  const [latIdxStr, lngIdxStr] = currentZoneId.split('_');
+  const btn = document.getElementById('captureBtn');
+  btn.disabled = true;
+  try {
+    await db.collection('zones').doc(currentZoneId).set({
+      latIdx: parseInt(latIdxStr, 10),
+      lngIdx: parseInt(lngIdxStr, 10),
+      ownerId: currentUser.uid,
+      ownerName: currentUser.displayName || currentUser.email.split('@')[0],
+      ownerDistanceM: totalDistanceM,
+      color: zoneColor,
+      captureLat: lastTrackedPos.lat,
+      captureLng: lastTrackedPos.lng,
+      capturedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast('Zone capturée !');
+    zoneCache[currentZoneId] = null; // sera rafraîchi par le listener onSnapshot
+    queryVisibleZones();
+  } catch (e) {
+    showToast('Capture impossible : ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* =========================================================
+   7. FIRESTORE — chargement + écriture des zones révélées
+   ========================================================= */
+function loadUserCells(uid) {
+  if (unsubscribeCells) unsubscribeCells();
+  revealed = [];
+  unsubscribeCells = db.collection('users').doc(uid).collection('cells')
+    .onSnapshot(snap => {
+      let changed = false;
+      snap.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const d = change.doc.data();
+          revealed.push({ lat: d.lat, lng: d.lng, r: d.r || visionRadiusM });
+          changed = true;
+        }
+      });
+      if (changed) {
+        drawFog();
+        if (revealed.length && !window.__dtwCentered) {
+          window.__dtwCentered = true;
+          const last = revealed[revealed.length - 1];
+          map.setView([last.lat, last.lng], 15);
+        }
+      }
+    }, err => showToast('Erreur Firestore : ' + err.message));
+}
+
+function loadUserLoops(uid) {
+  if (unsubscribeLoops) unsubscribeLoops();
+  revealedLoops = [];
+  unsubscribeLoops = db.collection('users').doc(uid).collection('loops')
+    .onSnapshot(snap => {
+      let changed = false;
+      snap.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const d = change.doc.data();
+          revealedLoops.push({ points: d.points, areaM2: d.areaM2 });
+          changed = true;
+        }
+      });
+      if (changed) drawFog();
+    }, err => showToast('Erreur chargement boucles : ' + err.message));
+}
+
+async function loadUserStats(uid) {
+  try {
+    const doc = await db.collection('users').doc(uid).get();
+    const d = doc.data() || {};
+    totalDistanceM = d.totalDistanceM || 0;
+    longestSessionM = d.longestSessionM || 0;
+    visionRadiusM = d.visionRadiusM || DEFAULT_VISION_RADIUS_M;
+    zoneColor = d.zoneColor || ZONE_COLORS[0];
+    document.getElementById('radiusSlider').value = visionRadiusM;
+    document.getElementById('radiusValue').textContent = visionRadiusM + ' m';
+    document.getElementById('radiusJumpHint').textContent = Math.round(visionRadiusM * JUMP_RATIO) + ' m';
+    [...colorGrid.children].forEach(c => c.classList.toggle('selected', c.dataset.color === zoneColor));
+    updateStats();
+  } catch (e) {
+    showToast('Erreur chargement stats : ' + e.message);
+  }
+}
+
+async function persistSessionStats(sessionM) {
+  if (!currentUser || sessionM <= 0) return;
+  const newLongest = Math.max(longestSessionM, sessionM);
+  const newTotal = totalDistanceM + sessionM;
+  try {
+    await db.collection('users').doc(currentUser.uid).set({
+      totalDistanceM: newTotal,
+      longestSessionM: newLongest,
+      lastSessionAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    totalDistanceM = newTotal;
+    longestSessionM = newLongest;
+  } catch (e) {
+    showToast('Sync stats impossible : ' + e.message);
+  }
+}
+
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000, toRad = x => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+async function revealAt(lat, lng) {
+  const minJump = visionRadiusM * JUMP_RATIO;
+  const tooClose = revealed.some(p => haversine(p.lat, p.lng, lat, lng) < minJump);
+  if (tooClose) return;
+  const point = { lat, lng, r: visionRadiusM };
+  revealed.push(point);
+  drawFog();
+  if (currentUser) {
+    try {
+      await db.collection('users').doc(currentUser.uid).collection('cells').add({
+        lat, lng, r: visionRadiusM, ts: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (e) {
+      showToast('Sync impossible : ' + e.message);
+    }
+  }
+}
+
+// Aire d'un polygone via la formule du lacet, projetée localement en mètres
+// (approximation plate valide pour de petites boucles, pas pour de grandes distances)
+function polygonAreaM2(points) {
+  if (points.length < 3) return 0;
+  const lat0 = points[0].lat, lng0 = points[0].lng;
+  const mPerDegLat = 111320;
+  const mPerDegLng = 111320 * Math.cos(lat0 * Math.PI / 180);
+  const xy = points.map(p => [(p.lng - lng0) * mPerDegLng, (p.lat - lat0) * mPerDegLat]);
+  let sum = 0;
+  for (let i = 0; i < xy.length; i++) {
+    const [x1, y1] = xy[i];
+    const [x2, y2] = xy[(i + 1) % xy.length];
+    sum += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(sum) / 2;
+}
+
+// Suit le trajet de la session en cours et détecte quand il se referme sur lui-même
+function trackSessionPath(lat, lng) {
+  sessionPath.push({ lat, lng });
+  if (sessionPath.length < LOOP_MIN_POINTS || sessionDistanceM < LOOP_MIN_PATH_M) return;
+
+  const current = sessionPath[sessionPath.length - 1];
+  for (let i = 0; i < sessionPath.length - LOOP_MIN_POINTS; i++) {
+    if (haversine(sessionPath[i].lat, sessionPath[i].lng, current.lat, current.lng) < LOOP_CLOSE_THRESHOLD_M) {
+      closeLoop(sessionPath.slice(i));
+      sessionPath = [current]; // repart à zéro pour détecter d'autres boucles dans la même sortie
+      break;
+    }
+  }
+}
+
+async function closeLoop(loopPoints) {
+  const areaM2 = polygonAreaM2(loopPoints);
+  // Trop petit = bruit GPS, trop grand = anti-abus (on ne dévoile pas un quartier entier d'un coup)
+  if (areaM2 < 100 || areaM2 > MAX_LOOP_AREA_M2) return;
+
+  revealedLoops.push({ points: loopPoints, areaM2 });
+  drawFog();
+  showToast('Boucle fermée : ' + formatArea(areaM2) + ' découverts !');
+
+  if (currentUser) {
+    try {
+      await db.collection('users').doc(currentUser.uid).collection('loops').add({
+        points: loopPoints, areaM2, ts: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (e) {
+      showToast('Sync boucle impossible : ' + e.message);
+    }
+  }
+}
+
+/* =========================================================
+   8. GEOLOCALISATION
+   ========================================================= */
+const locateBtn = document.getElementById('locateBtn');
+locateBtn.addEventListener('click', () => tracking ? stopTracking() : startTracking());
+
+function startTracking() {
+  if (!navigator.geolocation) { showToast('Géolocalisation non disponible.'); return; }
+  tracking = true;
+  sessionDistanceM = 0;
+  lastTrackedPos = null;
+  sessionPath = [];
+  locateBtn.classList.add('tracking');
+  watchId = navigator.geolocation.watchPosition(onPosition, onPositionError, {
+    enableHighAccuracy: true, maximumAge: 5000, timeout: 15000
+  });
+}
+
+function stopTracking() {
+  tracking = false;
+  locateBtn.classList.remove('tracking');
+  if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  document.getElementById('captureBtn').classList.add('hidden');
+  if (sessionDistanceM > 0) {
+    const finished = sessionDistanceM;
+    persistSessionStats(finished).then(() => {
+      sessionDistanceM = 0;
+      updateStats();
+    });
+  }
+}
+
+function onPosition(pos) {
+  const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+  if (accuracy > MAX_ACCURACY_M) { showToast('Signal GPS imprécis (±' + Math.round(accuracy) + 'm)'); return; }
+
+  if (!userMarker) {
+    const icon = L.divIcon({ className: '', html: '<div style="width:16px;height:16px;border-radius:50%;background:#2ec4b6;border:2px solid #05050a;box-shadow:0 0 10px #2ec4b6;"></div>', iconSize: [16,16] });
+    userMarker = L.marker([lat, lng], { icon, zIndexOffset: 1000 }).addTo(map);
+    accuracyCircle = L.circle([lat, lng], { radius: accuracy, color: '#2ec4b6', weight: 1, fillOpacity: 0.08 }).addTo(map);
+    map.setView([lat, lng], 16);
+  } else {
+    userMarker.setLatLng([lat, lng]);
+    accuracyCircle.setLatLng([lat, lng]).setRadius(accuracy);
+  }
+
+  accumulateDistance(lat, lng, pos.timestamp);
+  revealAt(lat, lng);
+  updateCurrentZone(lat, lng);
+  if (tracking) trackSessionPath(lat, lng);
+}
+
+function accumulateDistance(lat, lng, ts) {
+  if (!lastTrackedPos) { lastTrackedPos = { lat, lng, ts }; return; }
+  const dist = haversine(lastTrackedPos.lat, lastTrackedPos.lng, lat, lng);
+  const elapsedS = Math.max((ts - lastTrackedPos.ts) / 1000, 1);
+  if (dist < MIN_MOVE_M) return; // bruit GPS, on ne bouge pas assez pour compter
+  if (dist / elapsedS > MAX_PLAUSIBLE_MS) { lastTrackedPos = { lat, lng, ts }; return; } // saut GPS, on ignore ce segment
+  sessionDistanceM += dist;
+  lastTrackedPos = { lat, lng, ts };
+  updateStats();
+}
+
+function onPositionError(err) {
+  showToast('GPS : ' + err.message);
+  stopTracking();
+}
+
+/* =========================================================
+   9. TOAST
+   ========================================================= */
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+</script>
+</body>
+</html>

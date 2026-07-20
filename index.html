@@ -96,6 +96,9 @@
   #toast{position:fixed; top:70px; left:50%; transform:translateX(-50%); background:rgba(11,12,18,0.95); border:1px solid var(--brass-dim); color:var(--parchment); padding:9px 16px; border-radius:8px; font-size:13px; z-index:3000; opacity:0; transition:opacity .3s; pointer-events:none; max-width:80vw; text-align:center;}
   #toast.show{opacity:1;}
 
+  #offlineBanner{position:fixed; bottom:0; left:0; right:0; z-index:2500; background:var(--danger); color:#fff;
+    text-align:center; font-size:12px; padding:7px 12px; pointer-events:none;}
+
   .hidden{display:none !important;}
 
   .leaflet-control-attribution{background:rgba(5,5,10,0.6) !important; color:#54545f !important; font-size:9px !important;}
@@ -229,6 +232,7 @@
 </div>
 
 <div id="toast"></div>
+<div id="offlineBanner" class="hidden">Hors connexion — tes découvertes sont enregistrées localement et se synchroniseront au retour du réseau</div>
 
 <!-- Firebase (compat SDKs, no build step) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -242,20 +246,25 @@
    (Console Firebase > Paramètres du projet > Tes apps > SDK)
    ========================================================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyDgVfY_JDGOZ7_rShFhLHsK9Vl3cGa8ds0",
-  authDomain: "discovertheworld-f4e95.firebaseapp.com",
-  databaseURL: "https://discovertheworld-f4e95-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "discovertheworld-f4e95",
-  storageBucket: "discovertheworld-f4e95.firebasestorage.app",
-  messagingSenderId: "166227712020",
-  appId: "1:166227712020:web:e737990e0c977b0c036f01",
-  measurementId: "G-YQWHFJTTJJ"
+  apiKey: "REPLACE_ME",
+  authDomain: "REPLACE_ME.firebaseapp.com",
+  projectId: "REPLACE_ME",
+  storageBucket: "REPLACE_ME.appspot.com",
+  messagingSenderId: "REPLACE_ME",
+  appId: "REPLACE_ME"
 };
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 auth.languageCode = 'fr'; // emails Firebase (vérification, reset mdp...) envoyés en français
 const db = firebase.firestore();
+db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+  if (err.code === 'failed-precondition') {
+    console.warn('Persistance hors-ligne désactivée : plusieurs onglets DTW ouverts.');
+  } else if (err.code === 'unimplemented') {
+    console.warn('Persistance hors-ligne non supportée par ce navigateur.');
+  }
+});
 
 /* =========================================================
    2. PARAMÈTRES D'EXPLORATION
@@ -1070,6 +1079,14 @@ function showToast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
 }
+
+/* ---- Statut réseau : bannière + info seulement, tout le reste marche déjà en sous-main via Firestore ---- */
+function updateOnlineStatus() {
+  document.getElementById('offlineBanner').classList.toggle('hidden', navigator.onLine);
+}
+window.addEventListener('online', () => { updateOnlineStatus(); showToast('Connexion rétablie, synchronisation en cours...'); });
+window.addEventListener('offline', () => { updateOnlineStatus(); showToast('Hors connexion — tes données restent enregistrées localement.'); });
+updateOnlineStatus();
 </script>
 </body>
 </html>
